@@ -32,6 +32,10 @@ import type { ToolContext } from './tools/types.js';
 import listStorageBucketsTool from './tools/list_storage_buckets.js';
 import listStorageObjectsTool from './tools/list_storage_objects.js';
 import listRealtimePublicationsTool from './tools/list_realtime_publications.js';
+import { listCronJobsTool } from './tools/list_cron_jobs.js';
+import { listVectorIndexesTool } from './tools/list_vector_indexes.js';
+import { listEdgeFunctionsTool } from './tools/list_edge_functions.js';
+import { getEdgeFunctionDetailsTool } from './tools/get_edge_function_details.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -118,6 +122,10 @@ async function main() {
             [listStorageBucketsTool.name]: listStorageBucketsTool as AppTool,
             [listStorageObjectsTool.name]: listStorageObjectsTool as AppTool,
             [listRealtimePublicationsTool.name]: listRealtimePublicationsTool as AppTool,
+            [listCronJobsTool.name]: listCronJobsTool as AppTool,
+            [listVectorIndexesTool.name]: listVectorIndexesTool as AppTool,
+            [listEdgeFunctionsTool.name]: listEdgeFunctionsTool as AppTool,
+            [getEdgeFunctionDetailsTool.name]: getEdgeFunctionDetailsTool as AppTool,
         };
 
         // --- Tool Filtering Logic ---

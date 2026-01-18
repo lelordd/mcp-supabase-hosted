@@ -42,7 +42,10 @@ describe('utils', () => {
                 { id: 2, name: 'test2' },
             ];
             const result = handleSqlResponse(successResult, testSchema);
-            expect(result).toEqual(successResult);
+            expect(result).toEqual([
+                { id: 1, name: 'test' },
+                { id: 2, name: 'test2' },
+            ]);
         });
 
         test('throws error for SQL error response', () => {

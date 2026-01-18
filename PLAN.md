@@ -49,13 +49,13 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
         -   [x] `list_storage_objects`
     -   [x] **Realtime Inspection**
         -   [x] `list_realtime_publications`
-    -   [ ] **Extension-Specific Tools (Future, if needed)**
-        -   [ ] e.g., `list_cron_jobs` (for pg_cron)
-        -   [ ] e.g., `get_vector_indexes` (for pgvector)
-    -   [ ] **Edge Function Management (Optional/Future)**
-        -   [ ] `list_edge_functions`
-        -   [ ] `get_edge_function_details`
-        -   [ ] `deploy_edge_function`
+    -   [x] **Extension-Specific Tools**
+        -   [x] `list_cron_jobs` (for pg_cron)
+        -   [x] `list_vector_indexes` (for pgvector)
+    -   [x] **Edge Function Management**
+        -   [x] `list_edge_functions`
+        -   [x] `get_edge_function_details`
+        -   [-] `deploy_edge_function` (Skipped - requires filesystem access outside MCP scope)
 -   [x] Add Basic README.md
 -   [x] Test Infrastructure
     -   [x] Bun test runner setup
