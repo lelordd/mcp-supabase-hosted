@@ -8,6 +8,7 @@ import {
     McpError,
 } from '@modelcontextprotocol/sdk/types.js';
 import { SelfhostedSupabaseClient } from './client/index.js';
+import { HttpMcpServer } from './server/http-server.js';
 import { listTablesTool } from './tools/list_tables.js';
 import { listExtensionsTool } from './tools/list_extensions.js';
 import { listMigrationsTool } from './tools/list_migrations.js';
@@ -77,6 +78,9 @@ async function main() {
         .option('--jwt-secret <secret>', 'Supabase JWT secret (optional, needed for some tools)', process.env.SUPABASE_AUTH_JWT_SECRET)
         .option('--workspace-path <path>', 'Workspace root path (for file operations)', process.cwd())
         .option('--tools-config <path>', 'Path to a JSON file specifying which tools to enable (e.g., { "enabledTools": ["tool1", "tool2"] }). If omitted, all tools are enabled.')
+        .option('--transport <type>', 'Transport mode: stdio or http (default: stdio)', 'stdio')
+        .option('--port <number>', 'HTTP server port (default: 3000)', '3000')
+        .option('--host <string>', 'HTTP server host (default: 127.0.0.1)', '127.0.0.1')
         .parse(process.argv);
 
     const options = program.opts();
@@ -90,7 +94,20 @@ async function main() {
         throw new Error('Supabase Anon Key is required.');
     }
 
-    console.error('Initializing Self-Hosted Supabase MCP Server...');
+    // Validate transport option
+    const transport = options.transport as string;
+    if (transport !== 'stdio' && transport !== 'http') {
+        console.error('Error: Invalid transport. Must be "stdio" or "http".');
+        throw new Error('Invalid transport mode.');
+    }
+
+    // HTTP mode requires JWT secret for authentication
+    if (transport === 'http' && !options.jwtSecret) {
+        console.error('Error: --jwt-secret is required for HTTP transport mode.');
+        throw new Error('JWT secret is required for HTTP mode.');
+    }
+
+    console.error(`Initializing Self-Hosted Supabase MCP Server (transport: ${transport})...`);
 
     try {
         const selfhostedClient = await SelfhostedSupabaseClient.create({
@@ -214,90 +231,124 @@ async function main() {
 
         const capabilities = { tools: capabilitiesTools };
 
-        console.error('Initializing MCP Server...');
-        const server = new Server(
-            {
-                name: 'self-hosted-supabase-mcp',
-                version: '1.0.0',
-            },
-            {
-                capabilities,
-            },
-        );
+        // Factory function to create a configured MCP server instance
+        // This is needed for HTTP mode where each request may need a fresh server
+        const createMcpServer = (): Server => {
+            const server = new Server(
+                {
+                    name: 'self-hosted-supabase-mcp',
+                    version: '1.2.0',
+                },
+                {
+                    capabilities,
+                },
+            );
 
-        // The ListTools handler should return the array matching McpToolSchema structure
-        server.setRequestHandler(ListToolsRequestSchema, async () => ({
-            tools: Object.values(capabilities.tools),
-        }));
+            // The ListTools handler should return the array matching McpToolSchema structure
+            server.setRequestHandler(ListToolsRequestSchema, async () => ({
+                tools: Object.values(capabilities.tools),
+            }));
 
-        server.setRequestHandler(CallToolRequestSchema, async (request) => {
-            const toolName = request.params.name;
-            // Look up the tool in the filtered 'registeredTools' map
-            const tool = registeredTools[toolName as keyof typeof registeredTools];
+            server.setRequestHandler(CallToolRequestSchema, async (request) => {
+                const toolName = request.params.name;
+                // Look up the tool in the filtered 'registeredTools' map
+                const tool = registeredTools[toolName as keyof typeof registeredTools];
 
-            if (!tool) {
-                // Check if it existed originally but was filtered out
-                if (availableTools[toolName as keyof typeof availableTools]) {
-                     throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
-                }
-                // If the tool wasn't in the original list either, it's unknown
-                throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
-            }
-
-            try {
-                if (typeof tool.execute !== 'function') {
-                    throw new Error(`Tool ${toolName} does not have an execute method.`);
-                }
-
-                let parsedArgs: Record<string, unknown> | undefined = request.params.arguments as Record<string, unknown> | undefined;
-                // Still use Zod schema for internal validation before execution
-                if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
-                    parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments) as Record<string, unknown>;
-                }
-
-                // Create the context object using the imported type
-                const context: ToolContext = {
-                    selfhostedClient,
-                    workspacePath: options.workspacePath as string,
-                    log: (message, level = 'info') => {
-                        // Simple logger using console.error (consistent with existing logs)
-                        console.error(`[${level.toUpperCase()}] ${message}`);
+                if (!tool) {
+                    // Check if it existed originally but was filtered out
+                    if (availableTools[toolName as keyof typeof availableTools]) {
+                         throw new McpError(ErrorCode.MethodNotFound, `Tool "${toolName}" is available but not enabled by the current server configuration.`);
                     }
-                };
+                    // If the tool wasn't in the original list either, it's unknown
+                    throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
+                }
 
-                // Call the tool's execute method
-                // biome-ignore lint/suspicious/noExplicitAny: <explanation>
-                const result = await tool.execute(parsedArgs as any, context);
+                try {
+                    if (typeof tool.execute !== 'function') {
+                        throw new Error(`Tool ${toolName} does not have an execute method.`);
+                    }
 
-                return {
-                    content: [
-                        {
-                            type: 'text',
-                            text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
-                        },
-                    ],
-                };
-            } catch (error: unknown) {
-                 console.error(`Error executing tool ${toolName}:`, error);
-                 let errorMessage = `Error executing tool ${toolName}: `;
-                 if (error instanceof z.ZodError) {
-                     errorMessage += `Input validation failed: ${error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
-                 } else if (error instanceof Error) {
-                     errorMessage += error.message;
-                 } else {
-                     errorMessage += String(error);
-                 }
-                 return {
-                    content: [{ type: 'text', text: errorMessage }],
-                    isError: true,
-                 };
-            }
-        });
+                    let parsedArgs: Record<string, unknown> | undefined = request.params.arguments as Record<string, unknown> | undefined;
+                    // Still use Zod schema for internal validation before execution
+                    if (tool.inputSchema && typeof tool.inputSchema.parse === 'function') {
+                        parsedArgs = (tool.inputSchema as z.ZodTypeAny).parse(request.params.arguments) as Record<string, unknown>;
+                    }
 
-        console.error('Starting MCP Server in stdio mode...');
-        const transport = new StdioServerTransport();
-        await server.connect(transport);
-        console.error('MCP Server connected to stdio.');
+                    // Create the context object using the imported type
+                    const context: ToolContext = {
+                        selfhostedClient,
+                        workspacePath: options.workspacePath as string,
+                        log: (message, level = 'info') => {
+                            // Simple logger using console.error (consistent with existing logs)
+                            console.error(`[${level.toUpperCase()}] ${message}`);
+                        }
+                    };
+
+                    // Call the tool's execute method
+                    // biome-ignore lint/suspicious/noExplicitAny: <explanation>
+                    const result = await tool.execute(parsedArgs as any, context);
+
+                    return {
+                        content: [
+                            {
+                                type: 'text',
+                                text: typeof result === 'string' ? result : JSON.stringify(result, null, 2),
+                            },
+                        ],
+                    };
+                } catch (error: unknown) {
+                     console.error(`Error executing tool ${toolName}:`, error);
+                     let errorMessage = `Error executing tool ${toolName}: `;
+                     if (error instanceof z.ZodError) {
+                         errorMessage += `Input validation failed: ${error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                     } else if (error instanceof Error) {
+                         errorMessage += error.message;
+                     } else {
+                         errorMessage += String(error);
+                     }
+                     return {
+                        content: [{ type: 'text', text: errorMessage }],
+                        isError: true,
+                     };
+                }
+            });
+
+            return server;
+        };
+
+        // Start the appropriate transport
+        if (transport === 'http') {
+            console.error('Starting MCP Server in HTTP mode...');
+            const httpServer = new HttpMcpServer(
+                {
+                    port: parseInt(options.port as string, 10),
+                    host: options.host as string,
+                    jwtSecret: options.jwtSecret as string,
+                },
+                createMcpServer
+            );
+
+            await httpServer.start();
+
+            // Handle graceful shutdown
+            process.on('SIGINT', async () => {
+                console.error('Shutting down...');
+                await httpServer.stop();
+                process.exit(0);
+            });
+
+            process.on('SIGTERM', async () => {
+                console.error('Shutting down...');
+                await httpServer.stop();
+                process.exit(0);
+            });
+        } else {
+            console.error('Starting MCP Server in stdio mode...');
+            const server = createMcpServer();
+            const stdioTransport = new StdioServerTransport();
+            await server.connect(stdioTransport);
+            console.error('MCP Server connected to stdio.');
+        }
 
     } catch (error) {
         console.error('Failed to initialize or start the MCP server:', error);
