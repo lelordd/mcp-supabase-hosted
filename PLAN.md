@@ -37,7 +37,7 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
     -   [x] **Development & Extension Tools**
         -   [x] `generate_typescript_types`
         -   [x] `rebuild_hooks`
-    -   [-] `get_logs` (Skipped - PostgreSQL log access varies by installation)
+    -   [x] `get_logs` (Added - tries analytics stack, falls back to CSV logs)
     -   [x] **Auth User Management**
         -   [x] `list_auth_users`
         -   [x] `get_auth_user`
@@ -56,6 +56,10 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
         -   [x] `list_edge_functions`
         -   [x] `get_edge_function_details`
         -   [-] `deploy_edge_function` (Skipped - requires filesystem access outside MCP scope)
+    -   [x] **Additional Tools (from Official Supabase MCP)**
+        -   [x] `get_advisors` (security/performance advisory notices via Splinter)
+        -   [x] `get_storage_config` (storage bucket configuration)
+        -   [x] `update_storage_config` (update storage bucket settings)
 -   [x] Add Basic README.md
 -   [x] Test Infrastructure
     -   [x] Bun test runner setup

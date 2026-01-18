@@ -36,6 +36,10 @@ import { listCronJobsTool } from './tools/list_cron_jobs.js';
 import { listVectorIndexesTool } from './tools/list_vector_indexes.js';
 import { listEdgeFunctionsTool } from './tools/list_edge_functions.js';
 import { getEdgeFunctionDetailsTool } from './tools/get_edge_function_details.js';
+import { getLogsTool } from './tools/get_logs.js';
+import { getAdvisorsTool } from './tools/get_advisors.js';
+import { getStorageConfigTool } from './tools/get_storage_config.js';
+import { updateStorageConfigTool } from './tools/update_storage_config.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -126,6 +130,10 @@ async function main() {
             [listVectorIndexesTool.name]: listVectorIndexesTool as AppTool,
             [listEdgeFunctionsTool.name]: listEdgeFunctionsTool as AppTool,
             [getEdgeFunctionDetailsTool.name]: getEdgeFunctionDetailsTool as AppTool,
+            [getLogsTool.name]: getLogsTool as AppTool,
+            [getAdvisorsTool.name]: getAdvisorsTool as AppTool,
+            [getStorageConfigTool.name]: getStorageConfigTool as AppTool,
+            [updateStorageConfigTool.name]: updateStorageConfigTool as AppTool,
         };
 
         // --- Tool Filtering Logic ---
