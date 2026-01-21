@@ -54,6 +54,9 @@ import { getRlsStatusTool } from './tools/get_rls_status.js';
 import { listAvailableExtensionsTool } from './tools/list_available_extensions.js';
 import { getCronJobHistoryTool } from './tools/get_cron_job_history.js';
 import { listEdgeFunctionLogsTool } from './tools/list_edge_function_logs.js';
+import { getIndexStatsTool } from './tools/get_index_stats.js';
+import { getVectorIndexStatsTool } from './tools/get_vector_index_stats.js';
+import { explainQueryTool } from './tools/explain_query.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -177,6 +180,9 @@ async function main() {
             [listAvailableExtensionsTool.name]: listAvailableExtensionsTool as AppTool,
             [getCronJobHistoryTool.name]: getCronJobHistoryTool as AppTool,
             [listEdgeFunctionLogsTool.name]: listEdgeFunctionLogsTool as AppTool,
+            [getIndexStatsTool.name]: getIndexStatsTool as AppTool,
+            [getVectorIndexStatsTool.name]: getVectorIndexStatsTool as AppTool,
+            [explainQueryTool.name]: explainQueryTool as AppTool,
         };
 
         // --- Tool Filtering Logic ---
