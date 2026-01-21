@@ -247,7 +247,7 @@ export const getAdvisorsTool = {
                         allIssues.push({
                             code: String(row.code || ''),
                             name: String(row.name || checkName),
-                            level: (row.level as 'warning' | 'error' | 'info') || 'warning',
+                            level: (row.level as 'warning' | 'error' | 'info' | undefined) ?? 'warning',
                             description: String(row.description || ''),
                             detail: row.detail ? String(row.detail) : null,
                             remediation: row.remediation ? String(row.remediation) : null,

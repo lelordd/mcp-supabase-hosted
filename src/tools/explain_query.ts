@@ -178,11 +178,9 @@ export const explainQueryTool = {
                     if (Array.isArray(queryPlan)) {
                         plan = queryPlan;
                         // Extract timing from JSON plan
-                        const planObj = queryPlan[0] as Record<string, unknown>;
-                        if (planObj) {
-                            planningTime = planObj['Planning Time'] as number | undefined;
-                            executionTime = planObj['Execution Time'] as number | undefined;
-                        }
+                        const planObj = queryPlan[0] as Record<string, unknown> | undefined;
+                        planningTime = planObj?.['Planning Time'] as number | undefined;
+                        executionTime = planObj?.['Execution Time'] as number | undefined;
                     } else {
                         plan = queryPlan;
                     }

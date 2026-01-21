@@ -86,7 +86,7 @@ export const listEdgeFunctionLogsTool = {
 
         const tableCheck = await executeSqlWithFallback(client, checkTableSql, true);
 
-        if (!tableCheck || !Array.isArray(tableCheck) || tableCheck.length === 0) {
+        if (!Array.isArray(tableCheck) || tableCheck.length === 0) {
             throw new Error('Failed to check for function_edge_logs table.');
         }
 

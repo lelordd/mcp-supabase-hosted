@@ -124,7 +124,7 @@ export const getTriggerDefinitionTool = {
         }
 
         const rows = result as unknown[];
-        if (!rows || rows.length === 0) {
+        if (rows.length === 0) {
             throw new Error(`Trigger "${trigger_name}" not found on ${schema}.${table}.`);
         }
 

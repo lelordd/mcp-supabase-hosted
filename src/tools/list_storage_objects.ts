@@ -25,7 +25,7 @@ const StorageObjectSchema = z.object({
     mimetype: z.string().nullable(),
     // size comes from metadata - use transform instead of pipe for Zod v4
     size: z.union([z.string(), z.number(), z.null()]).transform((val) => {
-        if (val === null || val === undefined) return null;
+        if (val === null) return null;
         const num = typeof val === 'number' ? val : parseInt(String(val), 10);
         return isNaN(num) ? null : num;
     }),

@@ -90,7 +90,7 @@ export const getVectorIndexStatsTool = {
         }
 
         const checkRows = extensionCheck as Array<{ installed: boolean }>;
-        if (!checkRows || checkRows.length === 0 || !checkRows[0].installed) {
+        if (checkRows.length === 0 || !checkRows[0].installed) {
             throw new Error('pgvector extension is not installed. Install it with: CREATE EXTENSION vector;');
         }
 

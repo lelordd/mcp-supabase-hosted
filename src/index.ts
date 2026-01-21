@@ -291,7 +291,8 @@ async function main() {
                     throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${toolName}`);
                 }
 
-                const tool = registeredTools[toolName];
+                // Safe: Object.hasOwn check above validates toolName exists as own property
+                const tool = registeredTools[toolName]; // NOSONAR - validated via Object.hasOwn
 
                 // SECURITY: Check privilege level in HTTP mode
                 // In stdio mode (no userContext), all tools are accessible (trusted local process)

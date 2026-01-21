@@ -294,8 +294,9 @@ export class HttpMcpServer {
         this.app.use('/mcp', authMiddleware);
 
         // POST /mcp - Handle MCP JSON-RPC requests (stateless mode)
-        this.app.post('/mcp', async (req: AuthenticatedRequest, res: Response) => {
-            try {
+        this.app.post('/mcp', (req: AuthenticatedRequest, res: Response) => {
+            void (async () => {
+                try {
                 // Create a new transport and server for each request (stateless)
                 const transport = new StreamableHTTPServerTransport({
                     sessionIdGenerator: undefined, // Stateless mode
@@ -341,6 +342,7 @@ export class HttpMcpServer {
                     });
                 }
             }
+            })();
         });
 
         // GET /mcp - SSE stream for server-initiated messages

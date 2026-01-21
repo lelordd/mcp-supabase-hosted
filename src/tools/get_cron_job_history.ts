@@ -85,7 +85,7 @@ export const getCronJobHistoryTool = {
 
         const extensionCheck = await executeSqlWithFallback(client, checkExtensionSql, true);
 
-        if (!extensionCheck || !Array.isArray(extensionCheck) || extensionCheck.length === 0) {
+        if (!Array.isArray(extensionCheck) || extensionCheck.length === 0) {
             throw new Error('Failed to check pg_cron extension status.');
         }
 

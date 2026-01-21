@@ -14,8 +14,9 @@ import { createAuthMiddleware, type AuthenticatedRequest } from '../../server/au
 import type { Response, NextFunction } from 'express';
 
 describe('createAuthMiddleware', () => {
-    // Test-only secret - NOT used in production. This is a fixture for unit testing JWT validation.
-    const JWT_SECRET = 'test-jwt-secret-key-for-testing';
+    // codacy:disable-line:hardcoded-credentials -- Test fixture, not a real secret
+    // nosec: hardcoded test credential for unit testing only
+    const JWT_SECRET = 'test-jwt-secret-key-for-testing'; // NOSONAR
     const middleware = createAuthMiddleware(JWT_SECRET);
 
     // Helper to create mock request/response/next
@@ -95,7 +96,8 @@ describe('createAuthMiddleware', () => {
         test('returns 401 for token with invalid signature', () => {
             const { req, res, next } = createMocks();
             // Create token with wrong secret
-            const invalidToken = jwt.sign({ sub: 'user-123' }, 'wrong-secret', {
+            // codacy:disable-line:hardcoded-credentials -- Test fixture for signature mismatch
+            const invalidToken = jwt.sign({ sub: 'user-123' }, 'wrong-secret', { // NOSONAR
                 algorithm: 'HS256',
             });
             req.headers.authorization = `Bearer ${invalidToken}`;
