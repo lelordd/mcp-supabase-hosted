@@ -41,6 +41,19 @@ import { getLogsTool } from './tools/get_logs.js';
 import { getAdvisorsTool } from './tools/get_advisors.js';
 import { getStorageConfigTool } from './tools/get_storage_config.js';
 import { updateStorageConfigTool } from './tools/update_storage_config.js';
+import { listTableColumnsTool } from './tools/list_table_columns.js';
+import { listIndexesTool } from './tools/list_indexes.js';
+import { listConstraintsTool } from './tools/list_constraints.js';
+import { listForeignKeysTool } from './tools/list_foreign_keys.js';
+import { listRlsPoliciesTool } from './tools/list_rls_policies.js';
+import { listTriggersTool } from './tools/list_triggers.js';
+import { listDatabaseFunctionsTool } from './tools/list_database_functions.js';
+import { getFunctionDefinitionTool } from './tools/get_function_definition.js';
+import { getTriggerDefinitionTool } from './tools/get_trigger_definition.js';
+import { getRlsStatusTool } from './tools/get_rls_status.js';
+import { listAvailableExtensionsTool } from './tools/list_available_extensions.js';
+import { getCronJobHistoryTool } from './tools/get_cron_job_history.js';
+import { listEdgeFunctionLogsTool } from './tools/list_edge_function_logs.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -151,6 +164,19 @@ async function main() {
             [getAdvisorsTool.name]: getAdvisorsTool as AppTool,
             [getStorageConfigTool.name]: getStorageConfigTool as AppTool,
             [updateStorageConfigTool.name]: updateStorageConfigTool as AppTool,
+            [listTableColumnsTool.name]: listTableColumnsTool as AppTool,
+            [listIndexesTool.name]: listIndexesTool as AppTool,
+            [listConstraintsTool.name]: listConstraintsTool as AppTool,
+            [listForeignKeysTool.name]: listForeignKeysTool as AppTool,
+            [listRlsPoliciesTool.name]: listRlsPoliciesTool as AppTool,
+            [listTriggersTool.name]: listTriggersTool as AppTool,
+            [listDatabaseFunctionsTool.name]: listDatabaseFunctionsTool as AppTool,
+            [getFunctionDefinitionTool.name]: getFunctionDefinitionTool as AppTool,
+            [getTriggerDefinitionTool.name]: getTriggerDefinitionTool as AppTool,
+            [getRlsStatusTool.name]: getRlsStatusTool as AppTool,
+            [listAvailableExtensionsTool.name]: listAvailableExtensionsTool as AppTool,
+            [getCronJobHistoryTool.name]: getCronJobHistoryTool as AppTool,
+            [listEdgeFunctionLogsTool.name]: listEdgeFunctionLogsTool as AppTool,
         };
 
         // --- Tool Filtering Logic ---
