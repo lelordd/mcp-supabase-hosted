@@ -58,12 +58,19 @@ export async function runExternalCommand(command: string): Promise<{
 }
 
 /**
- * Executes SQL using the best available method: direct database connection first, then RPC fallback.
- * This bypasses JWT authentication issues when direct database access is available.
+ * Executes SQL using the best available method with proper privilege escalation.
+ *
+ * Execution order:
+ * 1. Direct database connection (bypasses all auth, most reliable for dev)
+ * 2. Service role RPC (uses execute_sql function with service_role privileges)
+ * 3. Fails if neither is available
+ *
+ * SECURITY NOTE: This function is for PRIVILEGED operations only.
+ * The execute_sql RPC function is restricted to service_role - authenticated users cannot call it.
  */
 export async function executeSqlWithFallback(
-    client: SelfhostedSupabaseClient, 
-    sql: string, 
+    client: SelfhostedSupabaseClient,
+    sql: string,
     readOnly: boolean = true
 ): Promise<SqlExecutionResult> {
     // Try direct database connection first (bypasses JWT authentication)
@@ -71,8 +78,18 @@ export async function executeSqlWithFallback(
         console.info('Using direct database connection (bypassing JWT)...');
         return await client.executeSqlWithPg(sql);
     }
-    
-    // Fallback to RPC if direct connection not available
-    console.info('Falling back to RPC method...');
-    return await client.executeSqlViaRpc(sql, readOnly);
+
+    // Try service role RPC (required since execute_sql is restricted to service_role)
+    if (client.isServiceRoleAvailable()) {
+        console.info('Using service role RPC method...');
+        return await client.executeSqlViaServiceRoleRpc(sql, readOnly);
+    }
+
+    // Neither method available - fail with clear error
+    return {
+        error: {
+            message: 'Neither direct database connection (DATABASE_URL) nor service role key (SUPABASE_SERVICE_ROLE_KEY) is configured. Cannot execute SQL.',
+            code: 'MCP_CONFIG_ERROR',
+        },
+    };
 } 

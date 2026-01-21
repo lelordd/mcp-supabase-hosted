@@ -12,8 +12,10 @@ import type { SqlExecutionResult, SqlSuccessResponse, SqlErrorResponse } from '.
  */
 export interface MockClientOptions {
     pgAvailable?: boolean;
+    serviceRoleAvailable?: boolean;
     rpcResult?: SqlExecutionResult;
     pgResult?: SqlExecutionResult;
+    serviceRoleRpcResult?: SqlExecutionResult;
     supabaseUrl?: string;
     anonKey?: string;
     serviceRoleKey?: string;
@@ -64,8 +66,10 @@ export function createMockSupabaseClient(overrides?: Partial<MockSupabaseClient>
 export function createMockClient(options: MockClientOptions = {}): SelfhostedSupabaseClient {
     const {
         pgAvailable = true,
+        serviceRoleAvailable = true,
         rpcResult = [] as SqlSuccessResponse,
         pgResult = [] as SqlSuccessResponse,
+        serviceRoleRpcResult = [] as SqlSuccessResponse,
         supabaseUrl = 'https://test.supabase.co',
         anonKey = 'test-anon-key',
         serviceRoleKey = 'test-service-role-key',
@@ -80,6 +84,7 @@ export function createMockClient(options: MockClientOptions = {}): SelfhostedSup
 
         executeSqlViaRpc: mock(async (_query: string, _readOnly?: boolean) => rpcResult),
         executeSqlWithPg: mock(async (_query: string) => pgResult),
+        executeSqlViaServiceRoleRpc: mock(async (_query: string, _readOnly?: boolean) => serviceRoleRpcResult),
         executeTransactionWithPg: mock(async <T>(callback: (client: unknown) => Promise<T>) => {
             const mockPgClient = {
                 query: mock(() => Promise.resolve({ rows: [] })),
@@ -88,6 +93,7 @@ export function createMockClient(options: MockClientOptions = {}): SelfhostedSup
         }),
 
         isPgAvailable: () => pgAvailable,
+        isServiceRoleAvailable: () => serviceRoleAvailable,
         getSupabaseUrl: () => supabaseUrl,
         getAnonKey: () => anonKey,
         getServiceRoleKey: () => (serviceRoleKey ? serviceRoleKey : undefined),

@@ -109,18 +109,19 @@ describe('utils', () => {
             expect(mockClient.executeSqlViaRpc).not.toHaveBeenCalled();
         });
 
-        test('falls back to RPC when pg is not available', async () => {
-            const expectedRows = [{ id: 1, name: 'rpc-result' }];
+        test('falls back to service role RPC when pg is not available', async () => {
+            const expectedRows = [{ id: 1, name: 'service-role-result' }];
             const mockClient = createMockClient({
                 pgAvailable: false,
-                rpcResult: createSuccessResponse(expectedRows),
+                serviceRoleAvailable: true,
+                serviceRoleRpcResult: createSuccessResponse(expectedRows),
             });
 
             const result = await executeSqlWithFallback(mockClient, 'SELECT * FROM users', true);
 
             expect(result).toEqual(expectedRows);
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledTimes(1);
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith('SELECT * FROM users', true);
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalledTimes(1);
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalledWith('SELECT * FROM users', true);
         });
 
         test('propagates error from pg connection', async () => {
@@ -135,11 +136,12 @@ describe('utils', () => {
             expect(result).toEqual(errorResponse);
         });
 
-        test('propagates error from RPC fallback', async () => {
+        test('propagates error from service role RPC fallback', async () => {
             const errorResponse = createErrorResponse('RPC failed', 'RPC_ERR');
             const mockClient = createMockClient({
                 pgAvailable: false,
-                rpcResult: errorResponse,
+                serviceRoleAvailable: true,
+                serviceRoleRpcResult: errorResponse,
             });
 
             const result = await executeSqlWithFallback(mockClient, 'SELECT 1');
@@ -147,12 +149,24 @@ describe('utils', () => {
             expect(result).toEqual(errorResponse);
         });
 
-        test('defaults readOnly to true', async () => {
-            const mockClient = createMockClient({ pgAvailable: false });
+        test('defaults readOnly to true when using service role RPC', async () => {
+            const mockClient = createMockClient({ pgAvailable: false, serviceRoleAvailable: true });
 
             await executeSqlWithFallback(mockClient, 'SELECT 1');
 
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith('SELECT 1', true);
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalledWith('SELECT 1', true);
+        });
+
+        test('returns error when neither pg nor service role is available', async () => {
+            const mockClient = createMockClient({
+                pgAvailable: false,
+                serviceRoleAvailable: false,
+            });
+
+            const result = await executeSqlWithFallback(mockClient, 'SELECT 1');
+
+            expect(result).toHaveProperty('error');
+            expect((result as any).error.code).toBe('MCP_CONFIG_ERROR');
         });
     });
 

@@ -129,22 +129,24 @@ describe('executeSqlTool', () => {
             expect(mockClient.executeSqlViaRpc).not.toHaveBeenCalled();
         });
 
-        test('falls back to RPC when pg is not available', async () => {
+        test('falls back to service role RPC when pg is not available', async () => {
             const mockClient = createMockClient({
                 pgAvailable: false,
-                rpcResult: createSuccessResponse([{ result: 1 }]),
+                serviceRoleAvailable: true,
+                serviceRoleRpcResult: createSuccessResponse([{ result: 1 }]),
             });
             const context = createMockContext(mockClient);
 
             await executeSqlTool.execute({ sql: 'SELECT 1 as result' }, context);
 
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalled();
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalled();
         });
 
-        test('passes read_only flag to RPC', async () => {
+        test('passes read_only flag to service role RPC', async () => {
             const mockClient = createMockClient({
                 pgAvailable: false,
-                rpcResult: createSuccessResponse([]),
+                serviceRoleAvailable: true,
+                serviceRoleRpcResult: createSuccessResponse([]),
             });
             const context = createMockContext(mockClient);
 
@@ -153,7 +155,19 @@ describe('executeSqlTool', () => {
                 context
             );
 
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith('SELECT 1', true);
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalledWith('SELECT 1', true);
+        });
+
+        test('throws error when neither pg nor service role is available', async () => {
+            const mockClient = createMockClient({
+                pgAvailable: false,
+                serviceRoleAvailable: false,
+            });
+            const context = createMockContext(mockClient);
+
+            await expect(
+                executeSqlTool.execute({ sql: 'SELECT 1' }, context)
+            ).rejects.toThrow('execute_sql requires either a direct database connection');
         });
 
         test('handles complex query results', async () => {

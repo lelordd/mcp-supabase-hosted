@@ -80,17 +80,18 @@ describe('listTablesTool', () => {
             await expect(listTablesTool.execute({}, context)).rejects.toThrow('SQL Error');
         });
 
-        test('uses read-only mode for query', async () => {
+        test('uses read-only mode for query via service role RPC', async () => {
             const mockClient = createMockClient({
                 pgAvailable: false,
-                rpcResult: createSuccessResponse([]),
+                serviceRoleAvailable: true,
+                serviceRoleRpcResult: createSuccessResponse([]),
             });
             const context = createMockContext(mockClient);
 
             await listTablesTool.execute({}, context);
 
-            // When using RPC, should be called with readOnly=true
-            expect(mockClient.executeSqlViaRpc).toHaveBeenCalledWith(
+            // When using service role RPC, should be called with readOnly=true
+            expect(mockClient.executeSqlViaServiceRoleRpc).toHaveBeenCalledWith(
                 expect.any(String),
                 true
             );
