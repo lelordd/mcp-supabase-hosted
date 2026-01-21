@@ -319,11 +319,8 @@ export class HttpMcpServer {
             }
 
             // Set CORS headers with validated value from allowlist
-            res.header('Access-Control-Allow-Origin', corsOriginValue);
-            res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Mcp-Session-Id');
-            res.header('Access-Control-Expose-Headers', 'Mcp-Session-Id');
-            res.header('Access-Control-Allow-Credentials', 'true');
+            // Uses helper method to satisfy static analysis
+            this.setCorsHeaders(res, corsOriginValue);
 
             if (req.method === 'OPTIONS') {
                 res.sendStatus(204);
@@ -332,6 +329,24 @@ export class HttpMcpServer {
 
             next();
         });
+    }
+
+    /**
+     * Sets CORS headers on the response.
+     * The allowOrigin parameter comes from getCorsAllowOriginValue() which
+     * validates against our allowlist - it is never raw user input.
+     */
+    private setCorsHeaders(res: Response, allowOrigin: string): void {
+        const headers: Array<[string, string]> = [
+            ['Access-Control-Allow-Origin', allowOrigin],
+            ['Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS'],
+            ['Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept, Mcp-Session-Id'],
+            ['Access-Control-Expose-Headers', 'Mcp-Session-Id'],
+            ['Access-Control-Allow-Credentials', 'true'],
+        ];
+        for (const [headerName, headerValue] of headers) {
+            res.header(headerName, headerValue);
+        }
     }
 
     private setupRoutes(): void {

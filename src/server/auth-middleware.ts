@@ -34,7 +34,7 @@ interface SupabaseJwtPayload {
  */
 const AUTH_ERROR_MESSAGES = {
     MISSING_HEADER: 'Missing Authorization header',
-    INVALID_FORMAT: 'Invalid Authorization header format. Expected: Bearer <token>',
+    INVALID_FORMAT: 'Invalid Authorization header format. Expected: Bearer [token]',
     MISSING_TOKEN: 'Missing token in Authorization header',
     MISSING_SUBJECT: 'Invalid token: missing subject (sub) claim',
     TOKEN_EXPIRED: 'Token has expired',

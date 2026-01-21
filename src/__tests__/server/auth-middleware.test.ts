@@ -72,7 +72,7 @@ describe('createAuthMiddleware', () => {
             expect(res.status).toHaveBeenCalledWith(401);
             expect(res.json).toHaveBeenCalledWith({
                 error: 'Unauthorized',
-                message: 'Invalid Authorization header format. Expected: Bearer <token>',
+                message: 'Invalid Authorization header format. Expected: Bearer [token]',
             });
             expect(next).not.toHaveBeenCalled();
         });
