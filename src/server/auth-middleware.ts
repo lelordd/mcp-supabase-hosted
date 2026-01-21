@@ -47,6 +47,7 @@ export function createAuthMiddleware(jwtSecret: string) {
         }
 
         if (!authHeader.startsWith('Bearer ')) {
+            // NOSONAR - This is a JSON API response, not HTML. No XSS risk.
             res.status(401).json({
                 error: 'Unauthorized',
                 message: 'Invalid Authorization header format. Expected: Bearer <token>',

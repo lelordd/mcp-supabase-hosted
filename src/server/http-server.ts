@@ -54,7 +54,7 @@ export class HttpMcpServer {
 
         // Start periodic cleanup of expired rate limit entries to prevent memory leak
         this.cleanupIntervalId = setInterval(
-            () => this.cleanupExpiredRateLimitEntries(),
+            () => { this.cleanupExpiredRateLimitEntries(); },
             this.CLEANUP_INTERVAL_MS
         );
     }
@@ -263,6 +263,7 @@ export class HttpMcpServer {
             // SECURITY: Only set origin if it was validated above by isOriginAllowed()
             // This prevents arbitrary user input from being reflected in the header
             if (origin && this.isOriginAllowed(origin)) {
+                // NOSONAR - origin is validated by isOriginAllowed() against allowlist before reaching here
                 res.header('Access-Control-Allow-Origin', origin);
             } else if (!origin) {
                 // For same-origin requests (no Origin header)

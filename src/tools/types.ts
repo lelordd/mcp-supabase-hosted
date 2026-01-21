@@ -49,7 +49,7 @@ export function canAccessTool(
 ): boolean {
     // SECURITY: Use Object.hasOwn to prevent prototype pollution / object injection
     const allowedLevels = Object.hasOwn(ROLE_PRIVILEGE_MAP, userRole)
-        ? ROLE_PRIVILEGE_MAP[userRole]
+        ? ROLE_PRIVILEGE_MAP[userRole] // NOSONAR - validated via Object.hasOwn above
         : ROLE_PRIVILEGE_MAP.authenticated;
     return allowedLevels.has(toolPrivilegeLevel);
 }
