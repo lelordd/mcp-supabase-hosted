@@ -14,13 +14,13 @@ type ListAuthUsersInput = z.infer<typeof ListAuthUsersInputSchema>;
 // Output schema - Zod for validation
 const AuthUserZodSchema = z.object({
     id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    email: z.string().email('Invalid email').nullable(),
     role: z.string().nullable(),
     // Timestamps returned as text from DB might not strictly be ISO 8601 / Zod datetime compliant
     created_at: z.string().nullable(),
     last_sign_in_at: z.string().nullable(),
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
     // Add more fields as needed (e.g., email_confirmed_at, phone)
 });
 const ListAuthUsersOutputSchema = z.array(AuthUserZodSchema);

@@ -5,7 +5,8 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
 ## Progress Tracking
 
 -   [x] Project Setup (package.json, tsconfig.json, dependencies, directories)
--   [ ] Define Core Types (`src/types/`)
+-   [x] Bun Migration (replaced Node.js/npm with Bun runtime)
+-   [x] Define Core Types (`src/types/`)
 -   [x] Implement `SelfhostedSupabaseClient` (`src/client/`)
     -   [x] Basic connection (`@supabase/supabase-js`)
     -   [x] RPC `execute_sql` function call logic
@@ -28,31 +29,39 @@ This plan outlines the steps to build the minimal self-hosted Supabase MCP serve
         -   [x] `execute_sql`
         -   [x] `get_database_connections`
         -   [x] `get_database_stats`
-    -   [x] **Project Configuration & Keys**
+    -   [x] **Project Configuration**
         -   [x] `get_project_url`
-        -   [x] `get_anon_key`
-        -   [x] `get_service_key`
         -   [x] `verify_jwt_secret`
+        -   [-] `get_anon_key` (Removed - security risk)
+        -   [-] `get_service_key` (Removed - security risk)
     -   [x] **Development & Extension Tools**
         -   [x] `generate_typescript_types`
         -   [x] `rebuild_hooks`
-    -   [-] `get_logs` (Skipped for now)
+    -   [x] `get_logs` (Added - tries analytics stack, falls back to CSV logs)
     -   [x] **Auth User Management**
         -   [x] `list_auth_users`
         -   [x] `get_auth_user`
         -   [x] `create_auth_user`
         -   [x] `delete_auth_user`
         -   [x] `update_auth_user`
-    -   [x] **Storage Insights (Next)**
+    -   [x] **Storage Insights**
         -   [x] `list_storage_buckets`
         -   [x] `list_storage_objects`
-    -   [x] **Realtime Inspection (Future)**
+    -   [x] **Realtime Inspection**
         -   [x] `list_realtime_publications`
-    -   [ ] **Extension-Specific Tools (Future, if needed)**
-        -   [ ] e.g., `list_cron_jobs` (for pg_cron)
-        -   [ ] e.g., `get_vector_indexes` (for pgvector)
-    -   [ ] **Edge Function Management (Optional/Future)**
-        -   [ ] `list_edge_functions`
-        -   [ ] `get_edge_function_details`
-        -   [ ] `deploy_edge_function`
--   [ ] Add Basic README.md
+    -   [x] **Extension-Specific Tools**
+        -   [x] `list_cron_jobs` (for pg_cron)
+        -   [x] `list_vector_indexes` (for pgvector)
+    -   [x] **Edge Function Management**
+        -   [x] `list_edge_functions`
+        -   [x] `get_edge_function_details`
+        -   [-] `deploy_edge_function` (Skipped - requires filesystem access outside MCP scope)
+    -   [x] **Additional Tools (from Official Supabase MCP)**
+        -   [x] `get_advisors` (security/performance advisory notices via Splinter)
+        -   [x] `get_storage_config` (storage bucket configuration)
+        -   [x] `update_storage_config` (update storage bucket settings)
+-   [x] Add Basic README.md
+-   [x] Test Infrastructure
+    -   [x] Bun test runner setup
+    -   [x] Utils tests
+    -   [x] Type definition tests

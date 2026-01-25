@@ -13,12 +13,12 @@ type GetAuthUserInput = z.infer<typeof GetAuthUserInputSchema>;
 // Output schema - Zod for validation (single user)
 const AuthUserZodSchema = z.object({
     id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    email: z.string().email('Invalid email').nullable(),
     role: z.string().nullable(),
     created_at: z.string().nullable(),
     last_sign_in_at: z.string().nullable(),
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
     // Add more fields as needed
 });
 // Use AuthUser for the output type hint
@@ -87,8 +87,8 @@ export const getAuthUserTool = {
                 return singleUser;
             } catch (validationError) {
                  if (validationError instanceof z.ZodError) {
-                    console.error("Zod validation failed:", validationError.errors);
-                    throw new Error(`Output validation failed: ${validationError.errors.map(e => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
+                    console.error("Zod validation failed:", validationError.issues);
+                    throw new Error(`Output validation failed: ${validationError.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`);
                 } 
                 throw validationError; // Rethrow other errors
             }

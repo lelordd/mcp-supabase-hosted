@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 import type { PoolClient } from 'pg';
 
 // Input schema
@@ -32,6 +32,7 @@ const mcpInputSchema = {
 export const applyMigrationTool = {
     name: 'apply_migration',
     description: 'Applies a SQL migration script and records it in the supabase_migrations.schema_migrations table within a transaction.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: ApplyMigrationInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: ApplyMigrationOutputSchema,

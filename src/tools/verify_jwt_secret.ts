@@ -1,15 +1,14 @@
 import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 // Input schema (none needed)
 const VerifyJwtInputSchema = z.object({});
 type VerifyJwtInput = z.infer<typeof VerifyJwtInputSchema>;
 
-// Output schema
+// Output schema - SECURITY: Removed jwt_secret_preview to avoid leaking secret info
 const VerifyJwtOutputSchema = z.object({
     jwt_secret_status: z.enum(['found', 'not_configured']).describe('Whether the JWT secret was provided to the server.'),
-    jwt_secret_preview: z.string().optional().describe('A preview of the JWT secret (first few characters) if configured.'),
 });
 
 // Static JSON Schema for MCP capabilities
@@ -22,7 +21,8 @@ const mcpInputSchema = {
 // The tool definition
 export const verifyJwtSecretTool = {
     name: 'verify_jwt_secret',
-    description: 'Checks if the Supabase JWT secret is configured for this server and returns a preview.',
+    description: 'Checks if the Supabase JWT secret is configured for this server.',
+    privilegeLevel: 'regular' as ToolPrivilegeLevel,
     inputSchema: VerifyJwtInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: VerifyJwtOutputSchema,
@@ -31,14 +31,10 @@ export const verifyJwtSecretTool = {
         const secret = client.getJwtSecret();
 
         if (secret) {
-            // Return only a preview for security
-            const preview = `${secret.substring(0, Math.min(secret.length, 5))}...`;
-            return {
-                jwt_secret_status: 'found',
-                jwt_secret_preview: preview,
-            };
+            // SECURITY: Only return status, no preview of the secret
+            return { jwt_secret_status: 'found' as const };
         }
 
-        return { jwt_secret_status: 'not_configured' };
+        return { jwt_secret_status: 'not_configured' as const };
     },
-}; 
+};

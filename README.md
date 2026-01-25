@@ -35,11 +35,9 @@ The server exposes the following tools to MCP clients:
     *   `execute_sql`: Executes an arbitrary SQL query (via RPC or direct connection).
     *   `get_database_connections`: Shows active database connections (`pg_stat_activity`).
     *   `get_database_stats`: Retrieves database statistics (`pg_stat_*`).
-*   **Project Configuration & Keys**
+*   **Project Configuration**
     *   `get_project_url`: Returns the configured Supabase URL.
-    *   `get_anon_key`: Returns the configured Supabase anon key.
-    *   `get_service_key`: Returns the configured Supabase service role key (if provided).
-    *   `verify_jwt_secret`: Checks if the JWT secret is configured and returns a preview.
+    *   `verify_jwt_secret`: Checks if the JWT secret is configured.
 *   **Development & Extension Tools**
     *   `generate_typescript_types`: Generates TypeScript types from the database schema.
     *   `rebuild_hooks`: Attempts to restart the `pg_net` worker (if used).
@@ -249,11 +247,235 @@ Adapt the configuration structure shown for Cursor or the official Supabase docu
 ```
 Consult the specific documentation for each client on where to place the `mcp.json` or equivalent configuration file.
 
+## Docker Integration with Self-Hosted Supabase
+
+This MCP server can be integrated directly into a self-hosted Supabase Docker Compose stack, making it available alongside other Supabase services via the Kong API gateway.
+
+### Architecture Overview
+
+When integrated with Docker:
+- The MCP server runs in HTTP transport mode (not stdio)
+- It's exposed through Kong at `/mcp/v1/*`
+- JWT authentication is handled by the MCP server itself
+- The server has direct access to the database and all Supabase keys
+
+### Setup Steps
+
+#### 1. Add the MCP Server as a Git Submodule
+
+From your Supabase Docker directory:
+
+```bash
+git submodule add https://github.com/HenkDz/selfhosted-supabase-mcp.git selfhosted-supabase-mcp
+```
+
+#### 2. Create the Dockerfile
+
+Create `volumes/mcp/Dockerfile`:
+
+```dockerfile
+# Dockerfile for selfhosted-supabase-mcp HTTP mode
+# Multi-stage build using Bun runtime for self-hosted Supabase
+
+FROM oven/bun:1.1-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files from submodule
+COPY selfhosted-supabase-mcp/package.json selfhosted-supabase-mcp/bun.lock* ./
+
+# Install dependencies
+RUN bun install --frozen-lockfile || bun install
+
+# Copy source code
+COPY selfhosted-supabase-mcp/src ./src
+COPY selfhosted-supabase-mcp/tsconfig.json ./
+
+# Build the application
+RUN bun build src/index.ts --outdir dist --target bun
+
+# Production stage
+FROM oven/bun:1.1-alpine AS runner
+
+WORKDIR /app
+
+# Create non-root user for security
+RUN addgroup --system --gid 1001 mcp && \
+    adduser --system --uid 1001 --ingroup mcp mcp
+
+# Copy built application from builder
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app/package.json ./
+
+# Set ownership
+RUN chown -R mcp:mcp /app
+
+USER mcp
+
+# Default environment variables
+ENV NODE_ENV=production
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD wget --no-verbose --tries=1 --spider http://localhost:3100/health || exit 1
+
+# Expose HTTP port
+EXPOSE 3100
+
+# Start the MCP server in HTTP mode
+CMD ["bun", "run", "dist/index.js"]
+```
+
+#### 3. Add the MCP Service to docker-compose.yml
+
+Add this service definition to your `docker-compose.yml`:
+
+```yaml
+## MCP Server - Model Context Protocol for AI integrations
+## DISABLED BY DEFAULT - Add 'mcp' to COMPOSE_PROFILES to enable
+mcp:
+  container_name: ${COMPOSE_PROJECT_NAME:-supabase}-mcp
+  profiles:
+    - mcp
+  build:
+    context: .
+    dockerfile: ./volumes/mcp/Dockerfile
+  restart: unless-stopped
+  healthcheck:
+    test:
+      [
+        "CMD",
+        "wget",
+        "--no-verbose",
+        "--tries=1",
+        "--spider",
+        "http://localhost:3100/health"
+      ]
+    timeout: 5s
+    interval: 10s
+    retries: 3
+  depends_on:
+    db:
+      condition: service_healthy
+    rest:
+      condition: service_started
+  environment:
+    SUPABASE_URL: http://kong:8000
+    SUPABASE_ANON_KEY: ${ANON_KEY}
+    SUPABASE_SERVICE_ROLE_KEY: ${SERVICE_ROLE_KEY}
+    SUPABASE_AUTH_JWT_SECRET: ${JWT_SECRET}
+    DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}
+  command:
+    [
+      "bun",
+      "run",
+      "dist/index.js",
+      "--transport", "http",
+      "--port", "3100",
+      "--host", "0.0.0.0",
+      "--url", "http://kong:8000",
+      "--anon-key", "${ANON_KEY}",
+      "--service-key", "${SERVICE_ROLE_KEY}",
+      "--jwt-secret", "${JWT_SECRET}",
+      "--db-url", "postgresql://postgres:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
+    ]
+```
+
+#### 4. Add Kong API Gateway Routes
+
+Add the MCP routes to `volumes/api/kong.yml` in the `services` section:
+
+```yaml
+## MCP Server routes - Model Context Protocol for AI integrations
+## Authentication is handled by the MCP server itself (JWT validation)
+- name: mcp-v1
+  _comment: 'MCP Server: /mcp/v1/* -> http://mcp:3100/*'
+  url: http://mcp:3100/
+  routes:
+    - name: mcp-v1-all
+      strip_path: true
+      paths:
+        - /mcp/v1/
+  plugins:
+    - name: cors
+      config:
+        origins:
+          - "$SITE_URL_PATTERN"
+          - "http://localhost:3000"
+          - "http://127.0.0.1:3000"
+        methods:
+          - GET
+          - POST
+          - DELETE
+          - OPTIONS
+        headers:
+          - Accept
+          - Authorization
+          - Content-Type
+          - X-Client-Info
+          - apikey
+          - Mcp-Session-Id
+        exposed_headers:
+          - Mcp-Session-Id
+        credentials: true
+        max_age: 3600
+```
+
+#### 5. Enable the MCP Service
+
+The MCP service uses Docker Compose profiles, so it's disabled by default. To enable it:
+
+**Option A: Set in `.env` file:**
+```bash
+COMPOSE_PROFILES=mcp
+```
+
+**Option B: Enable at runtime:**
+```bash
+docker compose --profile mcp up -d
+```
+
+### Accessing the MCP Server
+
+Once running, the MCP server is available at:
+- **Internal (from other containers):** `http://mcp:3100`
+- **External (via Kong):** `http://localhost:8000/mcp/v1/`
+
+### Authentication
+
+When running in HTTP mode, the MCP server validates JWTs using the configured `JWT_SECRET`. Clients must include a valid Supabase JWT in the `Authorization` header:
+
+```
+Authorization: Bearer <supabase-jwt>
+```
+
+The JWT's `role` claim determines access:
+- `service_role`: Full access to all tools (regular, privileged, sensitive)
+- `authenticated`: Access to regular tools only
+- `anon`: Access to regular tools only
+
+### Health Check
+
+The MCP server exposes a health endpoint:
+```bash
+curl http://localhost:8000/mcp/v1/health
+```
+
+### Security Considerations
+
+When deploying via Docker:
+1. The MCP server runs as a non-root user (`mcp:mcp`)
+2. JWT authentication is enforced for all tool calls
+3. Privileged tools (like `execute_sql`) require `service_role` JWT
+4. CORS is configured via Kong - adjust origins for your deployment
+
 ## Development
 
 *   **Language:** TypeScript
-*   **Build:** `tsc` (TypeScript Compiler)
-*   **Dependencies:** Managed via `npm` (`package.json`)
+*   **Build:** `tsc` (TypeScript Compiler) or `bun build`
+*   **Runtime:** Node.js or Bun
+*   **Dependencies:** Managed via `npm` or `bun` (`package.json`)
 *   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework).
 
 ## License

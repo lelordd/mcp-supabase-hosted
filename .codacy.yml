@@ -1,0 +1,19 @@
+# Codacy configuration
+# See: https://docs.codacy.com/repositories-configure/codacy-configuration-file/
+
+---
+engines:
+  eslint:
+    enabled: true
+
+exclude_paths:
+  # Test files - contain intentional test fixtures (hardcoded credentials, etc.)
+  - "src/__tests__/**"
+  - "**/*.test.ts"
+  - "**/*.spec.ts"
+  # Build output
+  - "dist/**"
+  - "node_modules/**"
+  # Config files
+  - "*.config.js"
+  - "*.config.ts"

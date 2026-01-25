@@ -22,11 +22,15 @@ const StorageObjectSchema = z.object({
     owner: z.string().uuid().nullable(),
     version: z.string().nullable(),
     // Get mimetype directly from SQL extraction
-    mimetype: z.string().nullable(), 
-    // size comes from metadata
-    size: z.string().pipe(z.coerce.number().int()).nullable(),
+    mimetype: z.string().nullable(),
+    // size comes from metadata - use transform instead of pipe for Zod v4
+    size: z.union([z.string(), z.number(), z.null()]).transform((val) => {
+        if (val === null) return null;
+        const num = typeof val === 'number' ? val : parseInt(String(val), 10);
+        return isNaN(num) ? null : num;
+    }),
     // Keep raw metadata as well
-    metadata: z.record(z.any()).nullable(),
+    metadata: z.record(z.string(), z.any()).nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(),
     last_accessed_at: z.string().nullable(),

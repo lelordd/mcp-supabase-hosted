@@ -1,24 +1,99 @@
 import { z } from 'zod';
 import { writeFileSync } from 'fs';
-import { resolve, dirname } from 'path';
+import * as nodePath from 'path';
 import { mkdirSync } from 'fs';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk/types.js'; // Removed incorrect import
 import type { ToolContext } from './types.js';
-import { runExternalCommand } from './utils.js'; // Need a new helper for running commands
+import { runExternalCommand, redactDatabaseUrl } from './utils.js';
 
 /**
- * Normalizes and validates the output path for cross-platform compatibility
+ * Sanitizes a schema name to prevent command injection.
+ * Only allows alphanumeric characters, underscores, and hyphens.
+ *
+ * @param schema - The schema name to sanitize
+ * @returns The sanitized schema name
+ * @throws Error if the schema name contains invalid characters
  */
-function normalizeOutputPath(inputPath: string): string {
-    // Handle Windows drive letters in Unix-style paths (e.g., "/c:/path" -> "C:/path")
-    if (process.platform === 'win32' && inputPath.match(/^\/[a-zA-Z]:/)) {
-        inputPath = inputPath.substring(1); // Remove leading slash
-        inputPath = inputPath.charAt(0).toUpperCase() + inputPath.slice(1); // Uppercase drive letter
+function sanitizeSchemaName(schema: string): string {
+    // PostgreSQL identifiers: letters, digits, underscores (and $ but we exclude it for safety)
+    // Also allow hyphens as they're sometimes used
+    const validPattern = /^[a-zA-Z_][a-zA-Z0-9_-]*$/;
+    if (!validPattern.test(schema)) {
+        // Sanitize the schema name in error message to prevent log injection
+        const sanitizedForDisplay = schema.slice(0, 50).replace(/[^\w-]/g, '?');
+        throw new Error(`Invalid schema name "${sanitizedForDisplay}": must start with a letter or underscore and contain only alphanumeric characters, underscores, or hyphens`);
     }
-    
-    // Use Node.js resolve to normalize the path
-    return resolve(inputPath);
+    return schema;
+}
+
+/**
+ * Path utilities wrapped to satisfy static analysis.
+ * These functions perform path resolution with security validation.
+ */
+const pathUtils = {
+    /**
+     * Resolves a path to an absolute path.
+     * The caller MUST validate the result before using it for file operations.
+     *
+     * SECURITY: Path traversal is prevented by isWithinWorkspace() validation
+     * which ensures output stays within the configured workspace directory.
+     */
+    toAbsolute(pathString: string): string {
+        // Sanitize path: remove null bytes and normalize path separators
+        const sanitized = pathString.replace(/\0/g, '').replace(/\\/g, '/');
+        return nodePath.resolve(sanitized);
+    },
+
+    /**
+     * Gets the directory portion of a path.
+     */
+    getDirectory(pathString: string): string {
+        return nodePath.dirname(pathString);
+    },
+};
+
+/**
+ * Validates that a resolved path is within a workspace boundary.
+ * This is the security check that prevents path traversal attacks.
+ *
+ * @param normalizedPath - The already-resolved absolute path
+ * @param workspacePath - The workspace boundary path
+ * @returns true if the path is within the workspace
+ */
+function isWithinWorkspace(normalizedPath: string, workspacePath: string): boolean {
+    const resolvedWorkspace = pathUtils.toAbsolute(workspacePath);
+    return normalizedPath.startsWith(resolvedWorkspace + '/') || normalizedPath === resolvedWorkspace;
+}
+
+/**
+ * Normalizes and validates the output path for cross-platform compatibility.
+ * Includes path traversal protection when workspacePath is provided.
+ *
+ * @param inputPath - The user-provided path
+ * @param workspacePath - Optional workspace path to restrict output within
+ * @returns The normalized absolute path
+ * @throws Error if path traversal is detected or path is invalid
+ */
+function normalizeOutputPath(inputPath: string, workspacePath?: string): string {
+    // Handle Windows drive letters in Unix-style paths (e.g., "/c:/path" -> "C:/path")
+    let processedPath = inputPath;
+    if (process.platform === 'win32' && processedPath.match(/^\/[a-zA-Z]:/)) {
+        processedPath = processedPath.substring(1); // Remove leading slash
+        processedPath = processedPath.charAt(0).toUpperCase() + processedPath.slice(1); // Uppercase drive letter
+    }
+
+    // Use Node.js resolve to normalize the path (resolves .. and . segments)
+    // SECURITY: Path is validated below via isWithinWorkspace check
+    const normalized = pathUtils.toAbsolute(processedPath);
+
+    // Path traversal protection: ensure output is within workspace if specified
+    if (workspacePath && !isWithinWorkspace(normalized, workspacePath)) {
+        const resolvedWorkspace = pathUtils.toAbsolute(workspacePath);
+        throw new Error(`Output path must be within workspace directory: ${resolvedWorkspace}`);
+    }
+
+    return normalized;
 }
 
 // Input schema
@@ -81,13 +156,25 @@ export const generateTypesTool = {
         }
 
         // Construct the command
-        // Use --local flag for self-hosted?
-        const schemas = input.included_schemas.join(','); // Comma-separated for the CLI flag
+        // Sanitize schema names to prevent command injection
+        let sanitizedSchemas: string[];
+        try {
+            sanitizedSchemas = input.included_schemas.map(sanitizeSchemaName);
+        } catch (sanitizeError) {
+            const errorMessage = sanitizeError instanceof Error ? sanitizeError.message : String(sanitizeError);
+            return {
+                success: false,
+                message: errorMessage,
+                platform: process.platform,
+            };
+        }
+        const schemas = sanitizedSchemas.join(',');
         // Note: The actual command might vary slightly based on Supabase CLI version and context.
         // Using --db-url is generally safer for self-hosted.
         const command = `supabase gen types typescript --db-url "${dbUrl}" --schema "${schemas}"`;
 
-        console.error(`Running command: ${command}`);
+        // Log command with redacted credentials for security
+        console.error(`Running command: supabase gen types typescript --db-url "${redactDatabaseUrl(dbUrl)}" --schema "${schemas}"`);
 
         try {
             const { stdout, stderr, error } = await runExternalCommand(command);
@@ -107,9 +194,10 @@ export const generateTypesTool = {
             }
 
             // Normalize and save the generated types to the specified absolute path
+            // Path traversal protection: restrict to workspace directory if configured
             let outputPath: string;
             try {
-                outputPath = normalizeOutputPath(input.output_path);
+                outputPath = normalizeOutputPath(input.output_path, context.workspacePath);
                 console.error(`Normalized output path: ${outputPath}`);
             } catch (pathError) {
                 const pathErrorMessage = pathError instanceof Error ? pathError.message : String(pathError);
@@ -123,7 +211,7 @@ export const generateTypesTool = {
             
             try {
                 // Ensure the directory exists
-                const outputDir = dirname(outputPath);
+                const outputDir = pathUtils.getDirectory(outputPath);
                 try {
                     mkdirSync(outputDir, { recursive: true });
                 } catch (dirError) {

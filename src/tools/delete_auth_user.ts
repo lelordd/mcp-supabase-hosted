@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 import { handleSqlResponse, isSqlErrorResponse } from './utils.js';
 
 // Input schema: User ID
@@ -31,6 +31,7 @@ const mcpInputSchema = {
 export const deleteAuthUserTool = {
     name: 'delete_auth_user',
     description: 'Deletes a user from auth.users by their ID. Requires service_role key and direct DB connection.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: DeleteAuthUserInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: DeleteAuthUserOutputSchema,

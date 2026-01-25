@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 import type { PoolClient } from 'pg';
 import type { AuthUser } from '../types/index.js'; // Import AuthUser
@@ -7,12 +7,12 @@ import type { AuthUser } from '../types/index.js'; // Import AuthUser
 // Input schema
 const UpdateAuthUserInputSchema = z.object({
     user_id: z.string().uuid().describe('The UUID of the user to update.'),
-    email: z.string().email().optional().describe('New email address.'),
-    password: z.string().min(6).optional().describe('New plain text password (min 6 chars). WARNING: Insecure.'),
-    role: z.string().optional().describe('New role.'),
-    app_metadata: z.record(z.unknown()).optional().describe('New app metadata (will overwrite existing).'),
-    user_metadata: z.record(z.unknown()).optional().describe('New user metadata (will overwrite existing).'),
-}).refine(data => 
+    email: z.optional(z.string().email('Invalid email')).describe('New email address.'),
+    password: z.optional(z.string().min(6, 'Password must be at least 6 characters')).describe('New plain text password (min 6 chars). WARNING: Insecure.'),
+    role: z.optional(z.string()).describe('New role.'),
+    app_metadata: z.optional(z.record(z.string(), z.unknown())).describe('New app metadata (will overwrite existing).'),
+    user_metadata: z.optional(z.record(z.string(), z.unknown())).describe('New user metadata (will overwrite existing).'),
+}).refine(data =>
     data.email || data.password || data.role || data.app_metadata || data.user_metadata,
     { message: "At least one field to update (email, password, role, app_metadata, user_metadata) must be provided." }
 );
@@ -21,13 +21,13 @@ type UpdateAuthUserInput = z.infer<typeof UpdateAuthUserInputSchema>;
 // Output schema - Zod validation for the updated user
 const UpdatedAuthUserZodSchema = z.object({
     id: z.string().uuid(),
-    email: z.string().email().nullable(),
+    email: z.string().email('Invalid email').nullable(),
     role: z.string().nullable(),
     created_at: z.string().nullable(),
     updated_at: z.string().nullable(), // Expect this to be updated
     last_sign_in_at: z.string().nullable(),
-    raw_app_meta_data: z.record(z.unknown()).nullable(),
-    raw_user_meta_data: z.record(z.unknown()).nullable(),
+    raw_app_meta_data: z.record(z.string(), z.unknown()).nullable(),
+    raw_user_meta_data: z.record(z.string(), z.unknown()).nullable(),
 });
 // Use AuthUser for the output type hint
 type UpdateAuthUserOutput = AuthUser;
@@ -50,6 +50,7 @@ const mcpInputSchema = {
 export const updateAuthUserTool = {
     name: 'update_auth_user',
     description: 'Updates fields for a user in auth.users. WARNING: Password handling is insecure. Requires service_role key and direct DB connection.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: UpdateAuthUserInputSchema,
     mcpInputSchema: mcpInputSchema, // Ensure defined
     outputSchema: UpdatedAuthUserZodSchema,
@@ -72,10 +73,12 @@ export const updateAuthUserTool = {
             updates.push(`email = $${paramIndex++}`);
             params.push(email);
         }
+        // SECURITY NOTE: The `password !== undefined` check below is NOT a timing attack.
+        // We're only checking if the field was provided, not comparing password values.
+        // Actual password comparison happens in the database via bcrypt which is constant-time.
         if (password !== undefined) {
             updates.push(`encrypted_password = crypt($${paramIndex++}, gen_salt('bf'))`);
             params.push(password);
-            console.warn(`SECURITY WARNING: Updating password for user ${user_id} with plain text password via direct DB update.`);
         }
         if (role !== undefined) {
             updates.push(`role = $${paramIndex++}`);
@@ -122,26 +125,32 @@ export const updateAuthUserTool = {
                 return UpdatedAuthUserZodSchema.parse(result.rows[0]);
             } catch (dbError: unknown) {
                 let errorMessage = 'Unknown database error during user update';
-                let isUniqueViolation = false;
 
                 // Check for potential email unique constraint violation if email was updated
                 if (typeof dbError === 'object' && dbError !== null && 'code' in dbError) {
-                    if (email !== undefined && dbError.code === '23505') {
-                        isUniqueViolation = true;
+                    // Safely extract code and message with proper type narrowing
+                    const errorCode = String((dbError as { code: unknown }).code);
+                    const errorMsg = 'message' in dbError && typeof (dbError as { message: unknown }).message === 'string'
+                        ? (dbError as { message: string }).message
+                        : undefined;
+
+                    // Check PG error code for unique violation
+                    if (email !== undefined && errorCode === '23505') {
                         errorMessage = `User update failed: Email '${email}' likely already exists for another user.`;
-                    } else if ('message' in dbError && typeof dbError.message === 'string') {
-                        errorMessage = `Database error (${dbError.code}): ${dbError.message}`;
+                    } else if (errorMsg) {
+                        errorMessage = `Database error (${errorCode}): ${errorMsg}`;
                     } else {
-                        errorMessage = `Database error code: ${dbError.code}`;
+                        errorMessage = `Database error code: ${errorCode}`;
                     }
                 } else if (dbError instanceof Error) {
-                     errorMessage = `Database error during user update: ${dbError.message}`;
+                    errorMessage = `Database error during user update: ${dbError.message}`;
                 } else {
-                     errorMessage = `Database error during user update: ${String(dbError)}`;
+                    errorMessage = `Database error during user update: ${String(dbError)}`;
                 }
 
-                console.error('Error updating user in DB:', dbError);
-                
+                // Log sanitized error (not full object to avoid leaking sensitive info)
+                console.error('Error updating user in DB:', errorMessage);
+
                 // Throw the specific error message
                 throw new Error(errorMessage);
             }

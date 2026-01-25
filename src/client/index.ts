@@ -11,6 +11,7 @@ import type { PoolClient } from 'pg'; // Import PoolClient type
 export class SelfhostedSupabaseClient {
     private options: SelfhostedSupabaseClientOptions;
     public supabase: SupabaseClient;
+    private supabaseServiceRole: SupabaseClient | null = null; // For privileged operations (service_role key)
     private pgPool: Pool | null = null; // Lazy initialized pool for direct DB access
     private rpcFunctionExists = false;
 
@@ -38,11 +39,14 @@ export class SelfhostedSupabaseClient {
         $$;
     `;
 
-    // SQL to grant permissions
+    // SQL to grant permissions - SECURITY: Only service_role can execute arbitrary SQL
     private static readonly GRANT_EXECUTE_SQL_FUNCTION = `
-        GRANT EXECUTE ON FUNCTION public.execute_sql(text, boolean) TO authenticated;
-        -- Optionally grant to anon if needed (uncomment if required):
-        -- GRANT EXECUTE ON FUNCTION public.execute_sql(text, boolean) TO anon;
+        -- Revoke any existing grants to ensure clean state
+        REVOKE ALL ON FUNCTION public.execute_sql(text, boolean) FROM PUBLIC;
+        REVOKE ALL ON FUNCTION public.execute_sql(text, boolean) FROM authenticated;
+        REVOKE ALL ON FUNCTION public.execute_sql(text, boolean) FROM anon;
+        -- Grant only to service_role for privileged operations
+        GRANT EXECUTE ON FUNCTION public.execute_sql(text, boolean) TO service_role;
     `;
 
     /**
@@ -53,12 +57,21 @@ export class SelfhostedSupabaseClient {
     private constructor(options: SelfhostedSupabaseClientOptions) {
         this.options = options;
 
-        // Initialize the primary Supabase client (anon key)
-        this.supabase = createClient(options.supabaseUrl, options.supabaseAnonKey, options.supabaseClientOptions);
-
-        // Validate required options
+        // Validate required options first
         if (!options.supabaseUrl || !options.supabaseAnonKey) {
             throw new Error('Supabase URL and Anon Key are required.');
+        }
+
+        // Initialize the primary Supabase client (anon key) - for regular user context
+        this.supabase = createClient(options.supabaseUrl, options.supabaseAnonKey, options.supabaseClientOptions);
+
+        // Initialize the privileged Supabase client (service role key) - for admin/SQL operations
+        if (options.supabaseServiceRoleKey) {
+            this.supabaseServiceRole = createClient(
+                options.supabaseUrl,
+                options.supabaseServiceRoleKey,
+                options.supabaseClientOptions
+            );
         }
     }
 
@@ -156,6 +169,74 @@ export class SelfhostedSupabaseClient {
     }
 
     /**
+     * Executes SQL using the service role client (privileged).
+     * Required because execute_sql RPC is restricted to service_role only.
+     * SECURITY: This method uses elevated privileges - use only for MCP tool operations.
+     */
+    public async executeSqlViaServiceRoleRpc(query: string, readOnly = false): Promise<SqlExecutionResult> {
+        if (!this.supabaseServiceRole) {
+            return {
+                error: {
+                    message: 'Service role key not configured. Cannot execute privileged SQL via RPC.',
+                    code: 'MCP_CONFIG_ERROR',
+                },
+            } as SqlErrorResponse;
+        }
+
+        if (!this.rpcFunctionExists) {
+            console.error('Attempted to call executeSqlViaServiceRoleRpc, but RPC function is not available.');
+            return {
+                error: {
+                    message: 'execute_sql RPC function not found or client not properly initialized.',
+                    code: 'MCP_CLIENT_ERROR',
+                },
+            } as SqlErrorResponse;
+        }
+
+        console.error(`Executing via Service Role RPC (readOnly: ${readOnly}): ${query.substring(0, 100)}...`);
+
+        try {
+            const { data, error } = await this.supabaseServiceRole.rpc('execute_sql', {
+                query: query,
+                read_only: readOnly,
+            });
+
+            if (error) {
+                console.error('Error executing SQL via Service Role RPC:', error);
+                return {
+                    error: {
+                        message: error.message,
+                        code: error.code,
+                        details: error.details,
+                        hint: error.hint,
+                    },
+                };
+            }
+
+            if (Array.isArray(data)) {
+                return data as SqlSuccessResponse;
+            }
+
+            console.error('Unexpected response format from execute_sql Service Role RPC:', data);
+            return {
+                error: {
+                    message: 'Unexpected response format from execute_sql RPC. Expected JSON array.',
+                    code: 'MCP_RPC_FORMAT_ERROR',
+                },
+            } as SqlErrorResponse;
+        } catch (rpcError: unknown) {
+            const errorMessage = rpcError instanceof Error ? rpcError.message : String(rpcError);
+            console.error('Exception during executeSqlViaServiceRoleRpc call:', rpcError);
+            return {
+                error: {
+                    message: `Exception during Service Role RPC call: ${errorMessage}`,
+                    code: 'MCP_RPC_EXCEPTION',
+                },
+            } as SqlErrorResponse;
+        }
+    }
+
+    /**
      * Executes SQL directly against the database using the pg library.
      * Requires DATABASE_URL to be configured.
      * Useful for simple queries when RPC is unavailable or direct access is preferred.
@@ -183,7 +264,7 @@ export class SelfhostedSupabaseClient {
             const error = dbError instanceof Error ? dbError : new Error(String(dbError));
             console.error('Error executing SQL with pg:', error);
             // Try to extract code if possible (pg errors often have a .code property)
-            const code = (dbError as { code?: string })?.code || 'PG_ERROR';
+            const code = (dbError as { code?: string }).code || 'PG_ERROR';
             return { error: { message: error.message, code: code } };
         } finally {
             client?.release();
@@ -264,9 +345,19 @@ export class SelfhostedSupabaseClient {
 
     private async checkAndCreateRpcFunction(): Promise<void> {
         console.error("Checking for public.execute_sql RPC function...");
+
+        // Use service role client for checking since execute_sql is restricted to service_role only
+        // Falls back to anon client if service role is not configured (will fail on permission check)
+        const clientToCheck = this.supabaseServiceRole || this.supabase;
+        const usingServiceRole = !!this.supabaseServiceRole;
+
+        if (!usingServiceRole) {
+            console.error("Warning: Checking execute_sql with anon key - this will fail if function exists but is restricted to service_role.");
+        }
+
         try {
             // Try calling the function with a simple query
-            const { error } = await this.supabase.rpc('execute_sql', { query: 'SELECT 1' });
+            const { error } = await clientToCheck.rpc('execute_sql', { query: 'SELECT 1' });
 
             if (!error) {
                 console.error("'public.execute_sql' function found.");
@@ -371,6 +462,14 @@ export class SelfhostedSupabaseClient {
      */
     public isPgAvailable(): boolean {
         return !!this.options.databaseUrl;
+    }
+
+    /**
+     * Checks if the service role client is available for privileged operations.
+     * Required for execute_sql RPC since it's restricted to service_role only.
+     */
+    public isServiceRoleAvailable(): boolean {
+        return this.supabaseServiceRole !== null;
     }
 
 } 

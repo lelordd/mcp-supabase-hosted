@@ -2,7 +2,7 @@ import { z } from 'zod';
 import type { SelfhostedSupabaseClient } from '../client/index.js';
 // import type { McpToolDefinition } from '@modelcontextprotocol/sdk'; // Removed incorrect import
 import { handleSqlResponse, executeSqlWithFallback } from './utils.js';
-import type { ToolContext } from './types.js';
+import type { ToolContext, ToolPrivilegeLevel } from './types.js';
 
 // Input schema (none needed)
 const RebuildHooksInputSchema = z.object({});
@@ -25,6 +25,7 @@ const mcpInputSchema = {
 export const rebuildHooksTool = {
     name: 'rebuild_hooks',
     description: 'Attempts to restart the pg_net worker. Requires the pg_net extension to be installed and available.',
+    privilegeLevel: 'privileged' as ToolPrivilegeLevel,
     inputSchema: RebuildHooksInputSchema,
     mcpInputSchema: mcpInputSchema,
     outputSchema: RebuildHooksOutputSchema,
