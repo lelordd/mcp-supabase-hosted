@@ -24,36 +24,120 @@ It avoids the complexities of the official cloud server related to multi-project
 
 ## Features (Implemented Tools)
 
-The server exposes the following tools to MCP clients:
+Tools are categorized by privilege level:
+- **Regular** tools are accessible by any authenticated Supabase JWT (`authenticated` or `service_role` role).
+- **Privileged** tools require a `service_role` JWT (HTTP mode) or direct database/service-key access (stdio mode).
 
-*   **Schema & Migrations**
-    *   `list_tables`: Lists tables in the database schemas.
-    *   `list_extensions`: Lists installed PostgreSQL extensions.
-    *   `list_migrations`: Lists applied Supabase migrations.
-    *   `apply_migration`: Applies a SQL migration script.
-*   **Database Operations & Stats**
-    *   `execute_sql`: Executes an arbitrary SQL query (via RPC or direct connection).
-    *   `get_database_connections`: Shows active database connections (`pg_stat_activity`).
-    *   `get_database_stats`: Retrieves database statistics (`pg_stat_*`).
-*   **Project Configuration**
-    *   `get_project_url`: Returns the configured Supabase URL.
-    *   `verify_jwt_secret`: Checks if the JWT secret is configured.
-*   **Development & Extension Tools**
-    *   `generate_typescript_types`: Generates TypeScript types from the database schema.
-    *   `rebuild_hooks`: Attempts to restart the `pg_net` worker (if used).
-*   **Auth User Management**
-    *   `list_auth_users`: Lists users from `auth.users`.
-    *   `get_auth_user`: Retrieves details for a specific user.
-    *   `create_auth_user`: Creates a new user (Requires direct DB access, insecure password handling).
-    *   `delete_auth_user`: Deletes a user (Requires direct DB access).
-    *   `update_auth_user`: Updates user details (Requires direct DB access, insecure password handling).
-*   **Storage Insights**
-    *   `list_storage_buckets`: Lists all storage buckets.
-    *   `list_storage_objects`: Lists objects within a specific bucket.
-*   **Realtime Inspection**
-    *   `list_realtime_publications`: Lists PostgreSQL publications (often `supabase_realtime`).
+### Schema & Migrations
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_tables` | Lists tables in the database schemas | Regular |
+| `list_extensions` | Lists installed PostgreSQL extensions | Regular |
+| `list_available_extensions` | Lists all available (installable) extensions | Regular |
+| `list_migrations` | Lists applied migrations from `supabase_migrations.schema_migrations` | Regular |
+| `apply_migration` | Applies a SQL migration and records it in `supabase_migrations.schema_migrations` | **Privileged** |
+| `list_table_columns` | Lists columns for a specific table | Regular |
+| `list_indexes` | Lists indexes for a specific table | Regular |
+| `list_constraints` | Lists constraints for a specific table | Regular |
+| `list_foreign_keys` | Lists foreign keys for a specific table | Regular |
+| `list_triggers` | Lists triggers for a specific table | Regular |
+| `list_database_functions` | Lists user-defined database functions | Regular |
+| `get_function_definition` | Gets the source definition of a function | Regular |
+| `get_trigger_definition` | Gets the source definition of a trigger | Regular |
 
-*(Note: `get_logs` was initially planned but skipped due to implementation complexities in a self-hosted environment).*
+### Database Operations & Stats
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `execute_sql` | Executes an arbitrary SQL query | **Privileged** |
+| `explain_query` | Runs `EXPLAIN ANALYZE` on a query | **Privileged** |
+| `get_database_connections` | Shows active connections (`pg_stat_activity`) | Regular |
+| `get_database_stats` | Retrieves database statistics (`pg_stat_*`) | Regular |
+| `get_index_stats` | Shows index usage statistics | Regular |
+| `get_vector_index_stats` | Shows pgvector index statistics | Regular |
+
+### Security & RLS
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_rls_policies` | Lists Row-Level Security policies for a table | Regular |
+| `get_rls_status` | Shows RLS enabled/disabled status for tables | Regular |
+| `get_advisors` | Retrieves security and performance advisory notices | Regular |
+
+### Project Configuration
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `get_project_url` | Returns the configured Supabase URL | Regular |
+| `verify_jwt_secret` | Checks if the JWT secret is configured | Regular |
+
+### Development & Extension Tools
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `generate_typescript_types` | Generates TypeScript types from the database schema | Regular |
+| `rebuild_hooks` | Restarts the `pg_net` worker (if used) | **Privileged** |
+| `get_logs` | Retrieves recent log entries (analytics stack or CSV fallback) | Regular |
+
+### Auth User Management
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_auth_users` | Lists users from `auth.users` | Regular |
+| `get_auth_user` | Retrieves details for a specific user | Regular |
+| `create_auth_user` | Creates a new user in `auth.users` (password bcrypt-hashed via pgcrypto) | **Privileged** |
+| `update_auth_user` | Updates user details (password bcrypt-hashed if changed) | **Privileged** |
+| `delete_auth_user` | Deletes a user from `auth.users` | **Privileged** |
+
+### Storage
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_storage_buckets` | Lists all storage buckets | Regular |
+| `list_storage_objects` | Lists objects within a specific bucket | Regular |
+| `get_storage_config` | Retrieves storage bucket configuration | Regular |
+| `update_storage_config` | Updates storage bucket settings | **Privileged** |
+
+### Realtime Inspection
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_realtime_publications` | Lists PostgreSQL publications (e.g. `supabase_realtime`) | Regular |
+
+### Extension-Specific Tools
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_cron_jobs` | Lists scheduled jobs (requires `pg_cron` extension) | Regular |
+| `get_cron_job_history` | Shows recent execution history for a cron job | Regular |
+| `list_vector_indexes` | Lists pgvector indexes (requires `pgvector` extension) | Regular |
+
+### Edge Functions
+| Tool | Description | Privilege |
+|------|-------------|-----------|
+| `list_edge_functions` | Lists deployed Edge Functions | Regular |
+| `get_edge_function_details` | Gets details and metadata for an Edge Function | Regular |
+| `list_edge_function_logs` | Retrieves recent logs for an Edge Function | Regular |
+
+---
+
+### About `supabase_migrations.schema_migrations`
+
+The `list_migrations` and `apply_migration` tools rely on the `supabase_migrations.schema_migrations` table. This table is **created and managed by the Supabase CLI** — it is not part of the MCP server itself.
+
+**How the table is created:**
+
+The table is automatically created when you initialise or run migrations using the Supabase CLI:
+```bash
+supabase db push        # pushes local migrations to a remote database
+supabase migration up   # applies pending local migration files
+```
+
+If you have never run the Supabase CLI against your database, the table will not exist and `list_migrations` will return an error. You can create it manually with:
+```sql
+CREATE SCHEMA IF NOT EXISTS supabase_migrations;
+CREATE TABLE IF NOT EXISTS supabase_migrations.schema_migrations (
+    version text NOT NULL PRIMARY KEY,
+    name    text NOT NULL DEFAULT '',
+    inserted_at timestamptz NOT NULL DEFAULT now()
+);
+```
+
+**Schema difference vs. official Supabase:**
+
+The Supabase cloud platform tracks additional columns (e.g. `statements`, `dirty`). This MCP server uses the minimal schema (version + name + inserted_at) that is compatible with the Supabase CLI's local-development workflow. If your existing table has extra columns they are simply ignored.
 
 ## Setup and Installation
 
@@ -67,9 +151,8 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
 
 ### Prerequisites
 
-*   Node.js (Version 18.x or later recommended)
-*   npm (usually included with Node.js)
-*   Access to your self-hosted Supabase instance (URL, keys, potentially direct DB connection string).
+*   [Bun](https://bun.sh/) v1.1 or later (replaces Node.js/npm — used for runtime and builds)
+*   Access to your self-hosted Supabase instance (URL, keys, and optionally a direct PostgreSQL connection string).
 
 ### Steps
 
@@ -80,13 +163,13 @@ npx -y @smithery/cli install @HenkDz/selfhosted-supabase-mcp --client claude
     ```
 2.  **Install dependencies:**
     ```bash
-    npm install
+    bun install
     ```
 3.  **Build the project:**
     ```bash
-    npm run build
+    bun run build
     ```
-    This compiles the TypeScript code to JavaScript in the `dist` directory.
+    This compiles the TypeScript source to JavaScript in the `dist` directory.
 
 ## Configuration
 
@@ -99,40 +182,99 @@ The server requires configuration details for your Supabase instance. These can 
 
 **Optional (but Recommended/Required for certain tools):**
 
-*   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Needed for operations requiring elevated privileges, like attempting to automatically create the `execute_sql` helper function if it doesn't exist.
-*   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access or transactions (`apply_migration`, Auth tools, Storage tools, querying `pg_catalog`, etc.).
-*   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. Needed for tools like `verify_jwt_secret`.
-*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable (whitelist). If omitted, all tools defined in the server are enabled. The file should have the format `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
+*   `--service-key <key>` or `SUPABASE_SERVICE_ROLE_KEY=<key>`: Your Supabase project's service role key. Required for privileged tools and for auto-creating the `execute_sql` helper function on startup.
+*   `--db-url <url>` or `DATABASE_URL=<url>`: The direct PostgreSQL connection string for your Supabase database (e.g., `postgresql://postgres:password@localhost:5432/postgres`). Required for tools needing direct database access (`apply_migration`, Auth tools, Storage tools, `pg_catalog` queries).
+*   `--jwt-secret <secret>` or `SUPABASE_AUTH_JWT_SECRET=<secret>`: Your Supabase project's JWT secret. Required when using `--transport http` and needed by the `verify_jwt_secret` tool.
+*   `--tools-config <path>`: Path to a JSON file specifying which tools to enable (whitelist). If omitted, all tools are enabled. Format: `{"enabledTools": ["tool_name_1", "tool_name_2"]}`.
+
+**HTTP transport options (when using `--transport http`):**
+
+*   `--port <number>`: HTTP server port (default: `3000`).
+*   `--host <string>`: HTTP server host (default: `127.0.0.1`).
+*   `--cors-origins <origins>`: Comma-separated list of allowed CORS origins. Defaults to localhost only.
+*   `--rate-limit-window <ms>`: Rate limit window in milliseconds (default: `60000`).
+*   `--rate-limit-max <count>`: Max requests per rate limit window (default: `100`).
+*   `--request-timeout <ms>`: Request timeout in milliseconds (default: `30000`).
 
 ### Important Notes:
 
-*   **`execute_sql` Helper Function:** Many tools rely on a `public.execute_sql` function within your Supabase database for secure and efficient SQL execution via RPC. The server attempts to check for this function on startup. If it's missing *and* a `service-key` (or `SUPABASE_SERVICE_ROLE_KEY`) *and* `db-url` (or `DATABASE_URL`) are provided, it will attempt to create the function and grant necessary permissions. If creation fails or keys aren't provided, tools relying solely on RPC may fail.
-*   **Direct Database Access:** Tools interacting directly with privileged schemas (`auth`, `storage`) or system catalogs (`pg_catalog`) generally require the `DATABASE_URL` to be configured for a direct `pg` connection.
+*   **`execute_sql` Helper Function:** Many tools rely on a `public.execute_sql` function within your Supabase database for SQL execution via RPC. The server attempts to check for this function on startup. If it's missing *and* a `service-key` *and* `db-url` are provided, it will attempt to create the function automatically. If creation fails or keys aren't provided, tools relying solely on RPC may fail.
+*   **Direct Database Access:** Tools interacting directly with privileged schemas (`auth`, `storage`) or system catalogs (`pg_catalog`) generally require `DATABASE_URL` to be configured.
+*   **Coolify / reverse-proxy deployments:**
+    *   The `DATABASE_URL` must use the internal hostname reachable from wherever the MCP server process runs, not the public-facing domain.
+    *   An `ECONNRESET` error during startup means the `DATABASE_URL` cannot be reached from the server's network context.
+    *   The server will still start successfully and all tools that don't require a direct DB connection will continue to work normally.
+
+## Security
+
+### HTTP transport (recommended for remote access)
+
+When running with `--transport http`, the server enforces:
+- **JWT authentication** on all `/mcp` endpoints using your `SUPABASE_AUTH_JWT_SECRET`.
+- **Privilege-based access control (RBAC)** — the `role` claim in the JWT determines which tools are accessible:
+  - `service_role`: Full access (all tools including privileged ones).
+  - `authenticated`: Regular tools only.
+  - `anon`: No tool access.
+- **Rate limiting** — configurable request rate limit per IP address.
+- **CORS** — configurable allow-list of origins (defaults to localhost only).
+- **Security headers** — `X-Content-Type-Options`, `X-Frame-Options`, `Strict-Transport-Security`, etc.
+- **Request timeouts** — configurable timeout to prevent resource exhaustion.
+
+### Stdio transport (local development)
+
+Stdio mode has **no authentication** — all tools (including privileged ones) are accessible. It is intended for trusted local clients only (e.g., an IDE extension running on your local machine). A warning is printed on startup when this mode is used.
+
+### Password handling for auth user tools
+
+`create_auth_user` and `update_auth_user` accept a plain-text password from the MCP client, then immediately hash it with **bcrypt** (via PostgreSQL's `pgcrypto` extension: `crypt($password, gen_salt('bf'))`) before storing it in `auth.users`. The plain-text password is never stored. Passwords are passed as query parameters (not string-interpolated into SQL), preventing SQL injection.
+
+> **Note:** The password travels over the MCP transport in plain text between the MCP client and server. This is inherent to the MCP protocol interface and unavoidable at this layer. Use the HTTP transport with TLS termination (e.g., behind Kong/nginx) for network protection.
+
+### SQL execution security
+
+All database operations in the MCP server use parameterized queries (`$1`, `$2`, ...) to prevent SQL injection. The `execute_sql` tool is an intentional exception — it executes arbitrary SQL by design (it is the tool's purpose). This tool is restricted to `service_role` privilege level to limit exposure.
 
 ## Usage
 
-Run the server using Node.js, providing the necessary configuration:
+### Stdio mode (local MCP clients)
+
+Run the server using Bun, providing the necessary configuration:
 
 ```bash
-# Using CLI arguments (example)
-node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --db-url postgresql://postgres:password@localhost:5432/postgres [--service-key <your-service-key>]
+# Using CLI arguments (stdio mode — default)
+bun run dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> \
+  --db-url postgresql://postgres:password@localhost:5432/postgres \
+  --service-key <your-service-key>
 
 # Example with tool whitelisting via config file
-node dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> --tools-config ./mcp-tools.json
+bun run dist/index.js --url http://localhost:8000 --anon-key <your-anon-key> \
+  --tools-config ./mcp-tools.json
 
 # Or configure using environment variables and run:
 # export SUPABASE_URL=http://localhost:8000
 # export SUPABASE_ANON_KEY=<your-anon-key>
 # export DATABASE_URL=postgresql://postgres:password@localhost:5432/postgres
 # export SUPABASE_SERVICE_ROLE_KEY=<your-service-key>
-# The --tools-config option MUST be passed as a CLI argument if used
-node dist/index.js
-
-# Using npm start script (if configured in package.json to pass args/read env)
-npm start -- --url ... --anon-key ...
+bun run dist/index.js
 ```
 
-The server communicates via standard input/output (stdio) and is designed to be invoked by an MCP client application (e.g., an IDE extension like Cursor). The client will connect to the server's stdio stream to list and call the available tools.
+### HTTP mode (Docker / remote access)
+
+```bash
+bun run dist/index.js \
+  --transport http \
+  --port 3100 \
+  --host 0.0.0.0 \
+  --url http://kong:8000 \
+  --anon-key <your-anon-key> \
+  --service-key <your-service-key> \
+  --jwt-secret <your-jwt-secret> \
+  --db-url postgresql://postgres:password@db:5432/postgres
+```
+
+HTTP mode requires `--jwt-secret`. All `/mcp` requests must include a valid Supabase JWT in the `Authorization: Bearer <token>` header.
+
+The server communicates via stdio (default) or HTTP (Streamable HTTP Transport) and is designed to be invoked by an MCP client application (e.g., an IDE extension like Cursor). The client will connect to the server's stdio stream or HTTP endpoint to list and call the available tools.
 
 ## Client Configuration Examples
 
@@ -152,9 +294,10 @@ Below are examples of how to configure popular MCP clients to use this self-host
     {
       "mcpServers": {
         "selfhosted-supabase": { 
-          "command": "node",
+          "command": "bun",
           "args": [
-            "<path-to-dist/index.js>", // e.g., "F:/Projects/mcp-servers/self-hosted-supabase-mcp/dist/index.js"
+            "run",
+            "<path-to-dist/index.js>", // e.g., "/home/user/selfhosted-supabase-mcp/dist/index.js"
             "--url",
             "<your-supabase-url>", // e.g., "http://localhost:8000"
             "--anon-key",
@@ -195,17 +338,11 @@ VS Code Copilot allows using environment variables populated via prompted inputs
       ],
       "servers": {
         "selfhosted-supabase": {
-          "command": "node",
-          // Arguments are passed via environment variables set below OR direct args for non-env options
+          "command": "bun",
           "args": [
+            "run",
             "${input:sh-supabase-server-path}",
-            // Use direct args for options not easily map-able to standard env vars like tools-config
-            // Check if tools-config input is provided before adding the argument
-            ["--tools-config", "${input:sh-supabase-tools-config}"] 
-            // Alternatively, pass all as args if simpler:
-            // "--url", "${input:sh-supabase-url}",
-            // "--anon-key", "${input:sh-supabase-anon-key}",
-            // ... etc ... 
+            "--tools-config", "${input:sh-supabase-tools-config}"
            ],
           "env": {
             "SUPABASE_URL": "${input:sh-supabase-url}",
@@ -213,7 +350,6 @@ VS Code Copilot allows using environment variables populated via prompted inputs
             "SUPABASE_SERVICE_ROLE_KEY": "${input:sh-supabase-service-key}",
             "DATABASE_URL": "${input:sh-supabase-db-url}",
             "SUPABASE_AUTH_JWT_SECRET": "${input:sh-supabase-jwt-secret}"
-            // The server reads these environment variables as fallbacks if CLI args are missing
           }
         }
       }
@@ -223,22 +359,21 @@ VS Code Copilot allows using environment variables populated via prompted inputs
 
 ### Other Clients (Windsurf, Cline, Claude)
 
-Adapt the configuration structure shown for Cursor or the official Supabase documentation, replacing the `command` and `args` with the `node` command and the arguments for this server, similar to the Cursor example:
+Adapt the configuration structure shown for Cursor or the official Supabase documentation, replacing the `command` and `args` with the `bun run` command and the arguments for this server, similar to the Cursor example:
 
 ```json
 {
   "mcpServers": {
     "selfhosted-supabase": { 
-      "command": "node",
+      "command": "bun",
       "args": [
+        "run",
         "<path-to-dist/index.js>", 
         "--url", "<your-supabase-url>", 
         "--anon-key", "<your-anon-key>", 
-        // Optional args...
         "--service-key", "<your-service-key>", 
         "--db-url", "<your-db-url>", 
         "--jwt-secret", "<your-jwt-secret>",
-        // Optional tools config
         "--tools-config", "<path-to-your-mcp-tools.json>"
       ]
     }
@@ -451,9 +586,9 @@ Authorization: Bearer <supabase-jwt>
 ```
 
 The JWT's `role` claim determines access:
-- `service_role`: Full access to all tools (regular, privileged, sensitive)
+- `service_role`: Full access to all tools (regular + privileged)
 - `authenticated`: Access to regular tools only
-- `anon`: Access to regular tools only
+- `anon`: No tool access
 
 ### Health Check
 
@@ -473,10 +608,11 @@ When deploying via Docker:
 ## Development
 
 *   **Language:** TypeScript
-*   **Build:** `tsc` (TypeScript Compiler) or `bun build`
-*   **Runtime:** Node.js or Bun
-*   **Dependencies:** Managed via `npm` or `bun` (`package.json`)
-*   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework).
+*   **Build:** `bun build` (via `bun run build`)
+*   **Runtime:** [Bun](https://bun.sh/) v1.1+
+*   **Test runner:** `bun test`
+*   **Dependencies:** Managed via `bun` (`bun.lock`)
+*   **Core Libraries:** `@supabase/supabase-js`, `pg` (node-postgres), `zod` (validation), `commander` (CLI args), `@modelcontextprotocol/sdk` (MCP server framework), `express`, `jsonwebtoken`.
 
 ## License
 
