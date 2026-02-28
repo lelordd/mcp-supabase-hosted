@@ -55,6 +55,7 @@ import { listEdgeFunctionLogsTool } from './tools/list_edge_function_logs.js';
 import { getIndexStatsTool } from './tools/get_index_stats.js';
 import { getVectorIndexStatsTool } from './tools/get_vector_index_stats.js';
 import { explainQueryTool } from './tools/explain_query.js';
+import { searchDocsTool } from './tools/search_docs.js';
 
 // Node.js built-in modules
 import * as fs from 'node:fs';
@@ -65,7 +66,7 @@ interface McpToolSchema {
     name: string;
     description?: string;
     // inputSchema is the JSON Schema object for MCP capabilities
-    inputSchema: object; 
+    inputSchema: object;
 }
 
 // Base structure for our tool objects - For Reference
@@ -184,6 +185,7 @@ async function main() {
             [getIndexStatsTool.name, getIndexStatsTool as AppTool],
             [getVectorIndexStatsTool.name, getVectorIndexStatsTool as AppTool],
             [explainQueryTool.name, explainQueryTool as AppTool],
+            [searchDocsTool.name, searchDocsTool as AppTool],
         ]);
 
         // --- Tool Filtering Logic ---
@@ -203,7 +205,7 @@ async function main() {
                 const configJson = JSON.parse(configFileContent);
 
                 if (!configJson || typeof configJson !== 'object' || !Array.isArray(configJson.enabledTools)) {
-                     throw new Error('Invalid config file format. Expected { "enabledTools": ["tool1", ...] }.');
+                    throw new Error('Invalid config file format. Expected { "enabledTools": ["tool1", ...] }.');
                 }
 
                 // Validate that enabledTools contains only strings
@@ -341,19 +343,19 @@ async function main() {
                         ],
                     };
                 } catch (error: unknown) {
-                     console.error(`Error executing tool ${toolName}:`, error);
-                     let errorMessage = `Error executing tool ${toolName}: `;
-                     if (error instanceof z.ZodError) {
-                         errorMessage += `Input validation failed: ${error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
-                     } else if (error instanceof Error) {
-                         errorMessage += error.message;
-                     } else {
-                         errorMessage += String(error);
-                     }
-                     return {
+                    console.error(`Error executing tool ${toolName}:`, error);
+                    let errorMessage = `Error executing tool ${toolName}: `;
+                    if (error instanceof z.ZodError) {
+                        errorMessage += `Input validation failed: ${error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`;
+                    } else if (error instanceof Error) {
+                        errorMessage += error.message;
+                    } else {
+                        errorMessage += String(error);
+                    }
+                    return {
                         content: [{ type: 'text', text: errorMessage }],
                         isError: true,
-                     };
+                    };
                 }
             });
 
