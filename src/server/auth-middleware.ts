@@ -84,7 +84,7 @@ export function createAuthMiddleware(jwtSecret: string) {
             }) as SupabaseJwtPayload;
 
             // Validate required fields
-            if (!decoded.sub) {
+            if (!decoded.sub && !decoded.role) {
                 res.status(401).json({
                     error: 'Unauthorized',
                     message: AUTH_ERROR_MESSAGES.MISSING_SUBJECT,
@@ -97,7 +97,7 @@ export function createAuthMiddleware(jwtSecret: string) {
 
             // Attach user info to request
             req.user = {
-                userId: decoded.sub,
+                userId: decoded.sub || decoded.role || 'system',
                 email: decoded.email || null,
                 role: decoded.role || 'authenticated',
                 exp: decoded.exp || 0,
